@@ -1,18 +1,18 @@
 package gin_oidc
 
 import (
-	"github.com/gin-gonic/gin"
-	"log"
-	"time"
-	"math/rand"
-	"github.com/gin-contrib/sessions"
 	"context"
-	"github.com/coreos/go-oidc"
-	"golang.org/x/oauth2"
+	"encoding/json"
 	"errors"
+	"github.com/coreos/go-oidc"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/oauth2"
+	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
-	"encoding/json"
+	"time"
 )
 
 type InitParams struct {
@@ -137,7 +137,7 @@ func protectMiddleware(config *oauth2.Config) func(c *gin.Context) {
 		serverSession := sessions.Default(c)
 		authorized := serverSession.Get("oidcAuthorized")
 		if (authorized != nil && authorized.(bool)) ||
-			c.Request.URL.Path ==  "oidc-callback" {
+			c.Request.URL.Path == "oidc-callback" {
 			c.Next()
 			return
 		}
@@ -150,6 +150,23 @@ func protectMiddleware(config *oauth2.Config) func(c *gin.Context) {
 			log.Fatal("failed save sessions. error: " + err.Error()) // todo handle more gracefully
 		}
 		c.Redirect(http.StatusFound, config.AuthCodeURL(state)) //redirect to authorization server
+	}
+
+}
+
+func ProtectWithGroupsClaim(requiredClaim string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		serverSession := sessions.Default(c)
+		var claims struct {
+			groups []string `json:"groups"`
+		}
+		claimsJSON, ok := serverSession.Get("oidcClaims").([]byte)
+		if ok {
+			err := json.Unmarshal(claimsJSON, &claims)
+			if err == nil {
+				log.Fatal(claims.groups)
+			}
+		}
 	}
 
 }
