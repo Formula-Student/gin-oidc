@@ -159,29 +159,42 @@ func ProtectWithGroupsClaim(claimName string, claimContent string) gin.HandlerFu
 		serverSession := sessions.Default(c)
 		var claims map[string]interface{}
 		claimsJSON, ok := serverSession.Get("oidcClaims").(string)
-		if ok {
-			err := json.Unmarshal([]byte(claimsJSON), &claims)
-			if err == nil {
-				for k, v := range claims {
-					if k == claimName {
-						groups, ok := v.([]interface{})
-						if ok {
-							for _, g := range groups {
-								if g.(string) == claimContent {
-									c.Next()
-									return
-								}
-							}
-						}
+		handleOkUnauthorized(c, ok, "Failed to get OIDC claims")
+		err := json.Unmarshal([]byte(claimsJSON), &claims)
+		handleErrorUnauthorized(c, err, "Failed to unmarshal OIDC claims")
+		for k, v := range claims {
+			if k == claimName {
+				groups, ok := v.([]interface{})
+				handleOkUnauthorized(c, ok, "Failed to assert OIDC group claims")
+				for _, g := range groups {
+					if g.(string) == claimContent {
+						c.Next()
+						return
 					}
 				}
 			}
 		}
-		c.Error(errors.New("Failed to verify ODIC claims"))
-		c.Status(http.StatusForbidden)
-		c.Abort()
+		handleOkUnauthorized(c, false, "Unauthorized: OIDC group not authorized")
 		return
+
 	}
+}
+
+func handleErrorUnauthorized(c *gin.Context, err error, message string) bool {
+	if err == nil {
+		return false
+	}
+	c.Error(errors.New(message))
+	c.Status(http.StatusForbidden)
+	c.Abort()
+	return true
+}
+
+func handleOkUnauthorized(c *gin.Context, ok bool, message string) bool {
+	if ok {
+		return false
+	}
+	return handleErrorUnauthorized(c, errors.New("not ok"), message)
 }
 
 func handleError(c *gin.Context, i InitParams, err error, message string) bool {
