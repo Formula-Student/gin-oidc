@@ -154,21 +154,34 @@ func protectMiddleware(config *oauth2.Config) func(c *gin.Context) {
 
 }
 
-func ProtectWithGroupsClaim(requiredClaim string) gin.HandlerFunc {
+func ProtectWithGroupsClaim(claimName string, claimContent string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		serverSession := sessions.Default(c)
-		var claims struct {
-			groups []string `json:"groups"`
-		}
-		claimsJSON, ok := serverSession.Get("oidcClaims").([]byte)
+		var claims map[string]interface{}
+		claimsJSON, ok := serverSession.Get("oidcClaims").(string)
 		if ok {
-			err := json.Unmarshal(claimsJSON, &claims)
+			err := json.Unmarshal([]byte(claimsJSON), &claims)
 			if err == nil {
-				log.Fatal(claims.groups)
+				for k, v := range claims {
+					if k == claimName {
+						groups, ok := v.([]interface{})
+						if ok {
+							for _, g := range groups {
+								if g.(string) == claimContent {
+									c.Next()
+									return
+								}
+							}
+						}
+					}
+				}
 			}
 		}
+		c.Error(errors.New("Failed to verify ODIC claims"))
+		c.Status(http.StatusForbidden)
+		c.Abort()
+		return
 	}
-
 }
 
 func handleError(c *gin.Context, i InitParams, err error, message string) bool {
